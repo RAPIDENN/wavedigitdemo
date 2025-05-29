@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WaveDigit - Comunicación Ondulatoria</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #111827;
+      color: white;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+    
+    .container {
+      width: 100%;
+      height: 100vh;
+    }
+    
+    .simulation {
+      display: flex;
+      gap: 20px;
+      height: 100%;
+      padding: 10px;
+    }
+    
+    .agent-panel {
+      width: 25%;
+      background-color: #1f2937;
+      border-radius: 8px;
+      padding: 10px;
+      height: calc(100% - 20px);
+      overflow-y: auto;
+    }
+    
+    .agent-panel h2 {
+      margin-top: 0;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #374151;
+    }
+    
+    .emitter h2 {
+      color: #4ade80;
+    }
+    
+    .receiver h2 {
+      color: #60a5fa;
+    }
+    
+    .visualization {
+      width: 50%;
+      background-color: #1f2937;
+      border-radius: 8px;
+      position: relative;
+      height: calc(100% - 20px);
+      overflow: hidden;
+    }
+    
+    .wave-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    
+    .agent {
+      position: absolute;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      z-index: 10;
+    }
+    
+    .agent-a {
+      background-color: #4ade80;
+      box-shadow: 0 0 15px #4ade80;
+      left: 20%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+    }
+    
+    .agent-b {
+      background-color: #60a5fa;
+      box-shadow: 0 0 15px #60a5fa;
+      right: 20%;
+      top: 50%;
+      transform: translate(50%, -50%);
+    }
+    
+    .wave {
+      position: absolute;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    
+    .grid {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-image: linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px),
+                        linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+      background-size: 20px 20px;
+      z-index: 1;
+    }
+    
+    .log-entry {
+      background-color: #374151;
+      border-radius: 6px;
+      padding: 8px;
+      margin-bottom: 8px;
+      font-size: 12px;
+    }
+    
+    .log-entry.emitter {
+      border-left: 3px solid #4ade80;
+    }
+    
+    .log-entry.receiver {
+      border-left: 3px solid #60a5fa;
+    }
+    
+    .log-time {
+      font-weight: bold;
+      margin-bottom: 4px;
+    }
+    
+    .emitter .log-time {
+      color: #4ade80;
+    }
+    
+    .receiver .log-time {
+      color: #60a5fa;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="simulation">
+      <!-- Panel Agente A (Emisor) -->
+      <div class="agent-panel emitter">
+        <h2>Agente A (Emisor)</h2>
+        <div id="emitterLogs"></div>
+      </div>
+      
+      <!-- Visualización -->
+      <div class="visualization">
+        <div class="grid"></div>
+        <div class="wave-container" id="waveContainer">
+          <div class="agent agent-a" id="agentA"></div>
+          <div class="agent agent-b" id="agentB"></div>
+        </div>
+      </div>
+      
+      <!-- Panel Agente B (Receptor) -->
+      <div class="agent-panel receiver">
+        <h2>Agente B (Receptor)</h2>
+        <div id="receiverLogs"></div>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    // Elementos DOM
+    const waveContainer = document.getElementById('waveContainer');
+    const emitterLogs = document.getElementById('emitterLogs');
+    const receiverLogs = document.getElementById('receiverLogs');
+    const agentA = document.getElementById('agentA');
+    const agentB = document.getElementById('agentB');
+    
+    // Estado
+    let running = false;
+    let time = 0;
+    let waves = [];
+    let animationId = null;
+    let lastTime = 0;
+    
+    // Crear onda
+    function createWave(x, y) {
+      const wave = document.createElement('div');
+      wave.className = 'wave';
+      wave.style.left = x + 'px';
+      wave.style.top = y + 'px';
+      wave.style.width = '0px';
+      wave.style.height = '0px';
+      
+      // Color verde con degradado a azul
+      const progress = Math.random(); // 0-1 para variar colores
+      const r = Math.round(74 + progress * (96 - 74));
+      const g = Math.round(222 - progress * (222 - 165));
+      const b = Math.round(128 + progress * (250 - 128));
+      wave.style.borderColor = `rgba(${r}, ${g}, ${b}, 0.6)`;
+      
+      waveContainer.appendChild(wave);
+      
+      // Guardar info de onda
+      waves.push({
+        element: wave,
+        size: 0,
+        speed: 2 + Math.random() * 2,
+        maxSize: 100 + Math.random() * 200,
+        startTime: time
+      });
+    }
+    
+    // Actualizar ondas
+    function updateWaves() {
+      for (let i = waves.length - 1; i >= 0; i--) {
+        const wave = waves[i];
+        
+        // Aumentar tamaño
+        wave.size += wave.speed;
+        wave.element.style.width = wave.size + 'px';
+        wave.element.style.height = wave.size + 'px';
+        
+        // Disminuir opacidad con el tiempo
+        const opacity = 0.8 * (1 - wave.size / wave.maxSize);
+        wave.element.style.borderColor = wave.element.style.borderColor.replace(
+          /rgba\([^,]+, [^,]+, [^,]+, [^)]+\)/,
+          `rgba(${wave.element.style.borderColor.match(/rgba\(([^,]+), ([^,]+), ([^,]+)/)[1]}, 
+                ${wave.element.style.borderColor.match(/rgba\([^,]+, ([^,]+), [^,]+/)[1]}, 
+                ${wave.element.style.borderColor.match(/rgba\([^,]+, [^,]+, ([^,]+)/)[1]}, 
+                ${opacity})`
+        );
+        
+        // Eliminar ondas que llegaron a su tamaño máximo
+        if (wave.size >= wave.maxSize) {
+          waveContainer.removeChild(wave.element);
+          waves.splice(i, 1);
+        }
+      }
+    }
+    
+    // Generar logs
+    function generateEmitterLog() {
+      // Calcular valores basados en tiempo
+      const x = Math.sin(time / 5) * 0.5;
+      const y = Math.cos(time / 3) * 0.3;
+      const pattern = Math.floor(time) % 4 + 1;
+      
+      // Crear log
+      const logEntry = document.createElement('div');
+      logEntry.className = 'log-entry emitter';
+      logEntry.innerHTML = `
+        <div class="log-time">T=${time.toFixed(1)}s: TRANSMITIENDO</div>
+        <div>cmd: x=${x.toFixed(2)}, y=${y.toFixed(2)}</div>
+        <div>patrón: ${pattern}</div>
+      `;
+      
+      // Añadir al panel
+      emitterLogs.appendChild(logEntry);
+      
+      // Limitar número de logs
+      if (emitterLogs.children.length > 10) {
+        emitterLogs.removeChild(emitterLogs.firstChild);
+      }
+      
+      // Desplazar al final
+      emitterLogs.scrollTop = emitterLogs.scrollHeight;
+      
+      // Crear onda desde Agente A
+      const rect = agentA.getBoundingClientRect();
+      const containerRect = waveContainer.getBoundingClientRect();
+      
+      createWave(
+        rect.left - containerRect.left + rect.width / 2,
+        rect.top - containerRect.top + rect.height / 2
+      );
+      
+      // Animar agente emisor
+      agentA.style.transform = 'translate(-50%, -50%) scale(1.2)';
+      setTimeout(() => {
+        agentA.style.transform = 'translate(-50%, -50%) scale(1)';
+      }, 200);
+    }
+    
+    function generateReceiverLog() {
+      // Retraso para simular tiempo de propagación
+      setTimeout(() => {
+        if (!running) return;
+        
+        // Calcular respuesta
+        const actions = ["ACERCARSE", "ALEJARSE", "ORBITAR", "RESONAR"];
+        const action = actions[Math.floor(time) % 4];
+        const intensity = (Math.sin(time / 3) + 1).toFixed(2);
+        
+        // Crear log
+        const logEntry = document.createElement('div');
+        logEntry.className = 'log-entry receiver';
+        logEntry.innerHTML = `
+          <div class="log-time">T=${(time + 0.5).toFixed(1)}s: RECIBIENDO</div>
+          <div>Acción: ${action}</div>
+          <div>Intensidad: ${intensity}</div>
+        `;
+        
+        // Añadir al panel
+        receiverLogs.appendChild(logEntry);
+        
+        // Limitar número de logs
+        if (receiverLogs.children.length > 10) {
+          receiverLogs.removeChild(receiverLogs.firstChild);
+        }
+        
+        // Desplazar al final
+        receiverLogs.scrollTop = receiverLogs.scrollHeight;
+        
+        // Animar agente receptor
+        agentB.style.transform = 'translate(50%, -50%) scale(1.2)';
+        setTimeout(() => {
+          agentB.style.transform = 'translate(50%, -50%) scale(1)';
+        }, 200);
+      }, 500);
+    }
+    
+    // Bucle de animación
+    function animate(timestamp) {
+      if (!lastTime) lastTime = timestamp;
+      const deltaTime = (timestamp - lastTime) / 1000;
+      lastTime = timestamp;
+      
+      if (running) {
+        // Actualizar tiempo
+        time += deltaTime;
+        
+        // Actualizar ondas
+        updateWaves();
+        
+        // Generar logs periódicamente
+        if (Math.floor(time * 2) > Math.floor((time - deltaTime) * 2)) {
+          generateEmitterLog();
+          generateReceiverLog();
+        }
+        
+        // Continuar animación
+        animationId = requestAnimationFrame(animate);
+      }
+    }
+    
+    // Iniciar/Detener simulación
+    function toggleSimulation() {
+      running = !running;
+      
+      if (running) {
+        // Resetear estado
+        time = 0;
+        lastTime = 0;
+        
+        // Limpiar logs
+        emitterLogs.innerHTML = '';
+        receiverLogs.innerHTML = '';
+        
+        // Limpiar ondas existentes
+        waves.forEach(wave => {
+          waveContainer.removeChild(wave.element);
+        });
+        waves = [];
+        
+        // Iniciar animación
+        animationId = requestAnimationFrame(animate);
+      } else {
+        // Detener animación
+        if (animationId) {
+          cancelAnimationFrame(animationId);
+          animationId = null;
+        }
+      }
+    }
+    
+    // Escuchar mensajes del padre
+    window.addEventListener('message', (event) => {
+      if (event.data === 'start' && !running) {
+        toggleSimulation();
+      } else if (event.data === 'stop' && running) {
+        toggleSimulation();
+      }
+    });
+  </script>
+</body>
+</html>
