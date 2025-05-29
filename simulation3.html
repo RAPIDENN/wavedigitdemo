@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WaveDigit - Control Físico por Ondas</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #111827;
+      color: white;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+    
+    .container {
+      width: 100%;
+      height: 100vh;
+    }
+    
+    .simulation {
+      display: flex;
+      gap: 20px;
+      height: 100%;
+      padding: 10px;
+    }
+    
+    .agent-panel {
+      width: 25%;
+      background-color: #1f2937;
+      border-radius: 8px;
+      padding: 10px;
+      height: calc(100% - 20px);
+      overflow-y: auto;
+    }
+    
+    .agent-panel h2 {
+      margin-top: 0;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #374151;
+    }
+    
+    .emitter h2 {
+      color: #4ade80;
+    }
+    
+    .receiver h2 {
+      color: #60a5fa;
+    }
+    
+    .visualization {
+      width: 50%;
+      background-color: #1f2937;
+      border-radius: 8px;
+      position: relative;
+      height: calc(100% - 20px);
+      overflow: hidden;
+      perspective: 1000px;
+    }
+    
+    .wave-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      transform-style: preserve-3d;
+    }
+    
+    .agent {
+      position: absolute;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      z-index: 10;
+      transition: transform 0.2s ease-out;
+    }
+    
+    .agent-a {
+      background-color: #4ade80;
+      box-shadow: 0 0 15px #4ade80;
+      left: 20%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+    }
+    
+    .agent-b {
+      background-color: #60a5fa;
+      box-shadow: 0 0 15px #60a5fa;
+      right: 20%;
+      top: 50%;
+      transform: translate(50%, -50%);
+    }
+    
+    .wave {
+      position: absolute;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      background: radial-gradient(circle, rgba(255,255,255,0) 0%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0) 100%);
+      transform-style: preserve-3d;
+    }
+    
+    .wave-ring {
+      position: absolute;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    
+    .grid {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-image: linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px),
+                        linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+      background-size: 20px 20px;
+      z-index: 1;
+      transform-style: preserve-3d;
+      transform: rotateX(45deg) translateZ(-100px);
+    }
+    
+    .object {
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      background-color: #f59e0b;
+      border-radius: 4px;
+      z-index: 5;
+      box-shadow: 0 0 10px rgba(245, 158, 11, 0.7);
+      transition: transform 0.3s ease-out;
+      transform-style: preserve-3d;
+    }
+    
+    .log-entry {
+      background-color: #374151;
+      border-radius: 6px;
+      padding: 8px;
+      margin-bottom: 8px;
+      font-size: 12px;
+    }
+    
+    .log-entry.emitter {
+      border-left: 3px solid #4ade80;
+    }
+    
+    .log-entry.receiver {
+      border-left: 3px solid #60a5fa;
+    }
+    
+    .log-time {
+      font-weight: bold;
+      margin-bottom: 4px;
+    }
+    
+    .emitter .log-time {
+      color: #4ade80;
+    }
+    
+    .receiver .log-time {
+      color: #60a5fa;
+    }
+    
+    .parameter-controls {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      right: 10px;
+      background-color: rgba(31, 41, 55, 0.7);
+      border-radius: 8px;
+      padding: 10px;
+      display: flex;
+      justify-content: space-between;
+      z-index: 20;
+    }
+    
+    .parameter-control {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 18%;
+    }
+    
+    .parameter-control label {
+      font-size: 10px;
+      margin-bottom: 5px;
+      text-align: center;
+    }
+    
+    .parameter-control input {
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="simulation">
+      <!-- Panel Agente A (Emisor) -->
+      <div class="agent-panel emitter">
+        <h2>Agente A (Emisor)</h2>
+        <div id="emitterLogs"></div>
+      </div>
+      
+      <!-- Visualización -->
+      <div class="visualization">
+        <div class="grid"></div>
+        <div class="wave-container" id="waveContainer">
+          <div class="agent agent-a" id="agentA"></div>
+          <div class="agent agent-b" id="agentB"></div>
+          <!-- Objetos físicos que serán afectados por las ondas -->
+          <div class="object" id="object1" style="left: 40%; top: 30%;"></div>
+          <div class="object" id="object2" style="left: 60%; top: 40%;"></div>
+          <div class="object" id="object3" style="left: 50%; top: 60%;"></div>
+        </div>
+        
+        <div class="parameter-controls">
+          <div class="parameter-control">
+            <label for="amplitude">Amplitud</label>
+            <input type="range" id="amplitude" min="0.1" max="1.0" step="0.1" value="0.6">
+          </div>
+          <div class="parameter-control">
+            <label for="decay">Decaimiento</label>
+            <input type="range" id="decay" min="1.0" max="3.0" step="0.1" value="1.8">
+          </div>
+          <div class="parameter-control">
+            <label for="frequency">Frecuencia</label>
+            <input type="range" id="frequency" min="1.0" max="10.0" step="0.5" value="5.0">
+          </div>
+          <div class="parameter-control">
+            <label for="fractalRatio">Ratio fractal</label>
+            <input type="range" id="fractalRatio" min="1.1" max="2.5" step="0.1" value="1.9">
+          </div>
+          <div class="parameter-control">
+            <label for="iterations">Iteraciones</label>
+            <input type="range" id="iterations" min="1" max="5" step="1" value="3">
+          </div>
+        </div>
+      </div>
+      
+      <!-- Panel Agente B (Receptor) -->
+      <div class="agent-panel receiver">
+        <h2>Agente B (Receptor)</h2>
+        <div id="receiverLogs"></div>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    // Elementos DOM
+    const waveContainer = document.getElementById('waveContainer');
+    const emitterLogs = document.getElementById('emitterLogs');
+    const receiverLogs = document.getElementById('receiverLogs');
+    const agentA = document.getElementById('agentA');
+    const agentB = document.getElementById('agentB');
+    
+    // Objetos físicos
+    const objects = [
+      document.getElementById('object1'),
+      document.getElementById('object2'),
+      document.getElementById('object3')
+    ];
+    
+    // Controles de parámetros
+    const amplitudeControl = document.getElementById('amplitude');
+    const decayControl = document.getElementById('decay');
+    const frequencyControl = document.getElementById('frequency');
+    const fractalRatioControl = document.getElementById('fractalRatio');
+    const iterationsControl = document.getElementById('iterations');
+    
+    // Estado
+    let running = false;
+    let time = 0;
+    let waves = [];
+    let animationId = null;
+    let lastTime = 0;
+    let waveParameters = {
+      amplitude: 0.6,
+      decay: 1.8,
+      frequency: 5.0,
+      fractalRatio: 1.9,
+      iterations: 3
+    };
+
+    // Almacenar referencias a todos los timeouts
+    const pendingTimeouts = [];
+
+    // Registrar timeouts
+    function safeSetTimeout(callback, delay) {
+      const id = setTimeout(callback, delay);
+      pendingTimeouts.push(id);
+      return id;
+    }
+
+    // Limpiar todos los timeouts
+    function clearAllTimeouts() {
+      pendingTimeouts.forEach(id => clearTimeout(id));
+      pendingTimeouts.length = 0;
+    }
+
+    // Mapa para gestionar efectos en objetos
+    const objectEffects = new Map();
+    
+    // Configurar controladores de eventos para los controles
+    amplitudeControl.addEventListener('input', () => {
+      waveParameters.amplitude = parseFloat(amplitudeControl.value);
+    });
+    
+    decayControl.addEventListener('input', () => {
+      waveParameters.decay = parseFloat(decayControl.value);
+    });
+    
+    frequencyControl.addEventListener('input', () => {
+      waveParameters.frequency = parseFloat(frequencyControl.value);
+    });
+    
+    fractalRatioControl.addEventListener('input', () => {
+      waveParameters.fractalRatio = parseFloat(fractalRatioControl.value);
+    });
+    
+    iterationsControl.addEventListener('input', () => {
+      waveParameters.iterations = parseInt(iterationsControl.value);
+    });
+
+    // Pre-crear un pool de elementos de onda reutilizables
+    const waveElementPool = [];
+    const ringElementPool = [];
+
+    function getWaveElement() {
+      if (waveElementPool.length > 0) {
+        return waveElementPool.pop();
+      } else {
+        const wave = document.createElement('div');
+        wave.className = 'wave';
+        return wave;
+      }
+    }
+
+    function getRingElement() {
+      if (ringElementPool.length > 0) {
+        return ringElementPool.pop();
+      } else {
+        const ring = document.createElement('div');
+        ring.className = 'wave-ring';
+        return ring;
+      }
+    }
+
+    // Reciclar elementos en lugar de eliminarlos
+    function recycleElements(wave) {
+      // Reciclar elemento principal
+      wave.element.style.display = 'none';
+      waveElementPool.push(wave.element);
+      
+      // Reciclar anillos
+      for (let ring of wave.rings) {
+        ring.style.display = 'none';
+        ringElementPool.push(ring);
+      }
+    }
+    
+    // Crear onda con propiedades físicas basadas en parámetros actuales
+    function createWave(x, y) {
+      // Crear elemento principal de onda con gradiente radial
+      const wave = getWaveElement();
+      wave.style.left = x + 'px';
+      wave.style.top = y + 'px';
+      wave.style.width = '0px';
+      wave.style.height = '0px';
+      
+      // Aplicar propiedades basadas en parámetros
+      const opacity = 0.2 + waveParameters.amplitude * 0.3;
+      wave.style.opacity = opacity;
+      
+      // Añadir varios anillos para visualizar patrones fractales
+      const rings = [];
+      const numRings = Math.max(2, Math.min(5, waveParameters.iterations));
+      
+      for (let i = 0; i < numRings; i++) {
+        const ring = getRingElement();
+        ring.style.left = x + 'px';
+        ring.style.top = y + 'px';
+        ring.style.width = '0px';
+        ring.style.height = '0px';
+        
+        // Determinar color basado en parámetros
+        // Variar de verde a azul basado en frecuencia
+        const hue = 120 - (waveParameters.frequency / 10 * 80);
+        
+        // Intensidad basada en amplitud
+        const saturation = 60 + waveParameters.amplitude * 40;
+        
+        // Brillo basado en decay (inverso)
+        const lightness = 70 - waveParameters.decay * 10;
+        
+        ring.style.borderColor = `hsla(${hue}, ${saturation}%, ${lightness}%, ${0.6 - i * 0.1})`;
+        ring.style.borderWidth = (3 - i * 0.5) + 'px';
+        
+        waveContainer.appendChild(ring);
+        rings.push(ring);
+      }
+      
+      waveContainer.appendChild(wave);
+      
+      // Calcular propiedades físicas basadas en parámetros actuales
+      const speed = 1 + waveParameters.frequency * 0.3;
+      const maxSize = 100 + waveParameters.amplitude * 200;
+      const strength = waveParameters.amplitude;
+      const complexity = waveParameters.iterations;
+      const decayRate = waveParameters.decay;
+      
+      // Guardar info de onda y sus anillos
+      waves.push({
+        element: wave,
+        rings: rings,
+        size: 0,
+        speed: speed,
+        maxSize: maxSize,
+        strength: strength,
+        complexity: complexity,
+        decayRate: decayRate,
+        x: x,
+        y: y,
+        startTime: time
+      });
+    }
+    
+    // Actualizar ondas
+    function updateWaves() {
+      for (let i = waves.length - 1; i >= 0; i--) {
+        const wave = waves[i];
+        
+        // Aumentar tamaño
+        wave.size += wave.speed;
+        
+        // Actualizar elemento principal
+        wave.element.style.width = wave.size + 'px';
+        wave.element.style.height = wave.size + 'px';
+        
+        // Actualizar anillos con diferentes tamaños
+        for (let j = 0; j < wave.rings.length; j++) {
+          const ringSize = wave.size * (0.7 + j * 0.15);
+          wave.rings[j].style.width = ringSize + 'px';
+          wave.rings[j].style.height = ringSize + 'px';
+        }
+        
+        // Disminuir opacidad con el tiempo y la distancia
+        const lifeProgress = wave.size / wave.maxSize;
+        const opacity = Math.max(0, 0.8 - lifeProgress * wave.decayRate);
+        
+        wave.element.style.opacity = opacity;
+        
+        for (let ring of wave.rings) {
+          ring.style.opacity = opacity * 0.8;
+        }
+        
+        // Comprobar interacciones con objetos
+        checkObjectInteractions(wave);
+        
+        // Eliminar ondas que llegaron a su tamaño máximo
+        if (wave.size >= wave.maxSize) {
+          // Reciclar elementos
+          recycleElements(wave);
+          waves.splice(i, 1);
+        }
+      }
+    }
+    
+    // Comprobar interacciones entre ondas y objetos
+    function checkObjectInteractions(wave) {
+      for (let obj of objects) {
+        const objRect = obj.getBoundingClientRect();
+        const containerRect = waveContainer.getBoundingClientRect();
+        
+        // Posición del objeto relativa al contenedor
+        const objX = objRect.left - containerRect.left + objRect.width / 2;
+        const objY = objRect.top - containerRect.top + objRect.height / 2;
+        
+        // Distancia entre el centro de la onda y el objeto
+        const dx = objX - wave.x;
+        const dy = objY - wave.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        // Comprobar si la onda está tocando el objeto
+        const waveRadius = wave.size / 2;
+        const objRadius = Math.max(objRect.width, objRect.height) / 2;
+        
+        // Si la distancia entre los centros está dentro del rango de la onda
+        // y la onda está creciendo (no decreciendo)
+        if (Math.abs(distance - waveRadius) < objRadius * 2) {
+          // Calcular fuerza basada en parámetros de onda
+          const force = wave.strength * (1 - wave.size / wave.maxSize) * 2;
+          
+          // Aplicar efecto al objeto
+          applyWaveEffect(obj, wave, force, dx, dy, distance);
+        }
+      }
+    }
+    
+    // Aplicar efecto de onda a un objeto
+    function applyWaveEffect(obj, wave, force, dx, dy, distance) {
+      // Normalizar dirección
+      const dirX = dx / distance;
+      const dirY = dy / distance;
+      
+      // Obtener o crear efecto para este objeto
+      if (!objectEffects.has(obj)) {
+        objectEffects.set(obj, {
+          translateX: 0,
+          translateY: 0,
+          translateZ: 0,
+          rotateX: 0,
+          rotateY: 0,
+          rotateZ: 0,
+          scale: 1
+        });
+      }
+      
+      const effect = objectEffects.get(obj);
+      
+      // Tipo de efecto basado en parámetros de onda
+      const effectType = Math.floor(wave.complexity) % 4;
+      
+      switch (effectType) {
+        case 0: // Desplazamiento
+          effect.translateX += dirX * force * 5;
+          effect.translateY += dirY * force * 5;
+          break;
+        case 1: // Rotación
+          effect.rotateZ += (dirX + dirY) * force * 15;
+          break;
+        case 2: // Elevación
+          effect.translateZ += force * 20;
+          break;
+        case 3: // Resonancia (escala)
+          effect.scale = 1 + Math.sin(time * wave.frequency) * force * 0.2;
+          break;
+      }
+      
+      // Aplicar amortiguación para que los efectos se desvanezcan con el tiempo
+      effect.translateX *= 0.95;
+      effect.translateY *= 0.95;
+      effect.translateZ *= 0.95;
+      effect.rotateX *= 0.95;
+      effect.rotateY *= 0.95;
+      effect.rotateZ *= 0.95;
+      effect.scale = 1 + (effect.scale - 1) * 0.95;
+      
+      // Aplicar transformación
+      obj.style.transform = `
+        translate3d(${effect.translateX}px, ${effect.translateY}px, ${effect.translateZ}px)
+        rotateX(${effect.rotateX}deg)
+        rotateY(${effect.rotateY}deg)
+        rotateZ(${effect.rotateZ}deg)
+        scale(${effect.scale})
+      `;
+    }
+    
+    // Generar logs
+    function generateEmitterLog() {
+      // Calcular valores basados en tiempo y parámetros actuales
+      const x = Math.sin(time / 5) * 0.5;
+      const y = Math.cos(time / 3) * 0.3;
+      
+      // Crear log
+      const logEntry = document.createElement('div');
+      logEntry.className = 'log-entry emitter';
+      logEntry.innerHTML = `
+        <div class="log-time">T=${time.toFixed(1)}s: EMITIENDO ONDA</div>
+        <div>Amplitud: ${waveParameters.amplitude.toFixed(1)}</div>
+        <div>Frecuencia: ${waveParameters.frequency.toFixed(1)}</div>
+        <div>Patrón: ${waveParameters.iterations}</div>
+      `;
+      
+      // Añadir al panel
+      emitterLogs.appendChild(logEntry);
+      
+      // Limitar número de logs
+      if (emitterLogs.children.length > 10) {
+        emitterLogs.removeChild(emitterLogs.firstChild);
+      }
+      
+      // Desplazar al final
+      emitterLogs.scrollTop = emitterLogs.scrollHeight;
+      
+      // Crear onda desde Agente A
+      const rect = agentA.getBoundingClientRect();
+      const containerRect = waveContainer.getBoundingClientRect();
+      
+      createWave(
+        rect.left - containerRect.left + rect.width / 2,
+        rect.top - containerRect.top + rect.height / 2
+      );
+      
+      // Animar agente emisor
+      agentA.style.transform = 'translate(-50%, -50%) scale(1.2)';
+      safeSetTimeout(() => {
+        agentA.style.transform = 'translate(-50%, -50%) scale(1)';
+      }, 200);
+    }
+    
+    function generateReceiverLog() {
+      // Retraso para simular tiempo de propagación
+      safeSetTimeout(() => {
+        if (!running) return;
+        
+        // Obtener efectos actuales de los objetos
+        const objectStates = [];
+        
+        objects.forEach((obj, index) => {
+          const effect = objectEffects.get(obj) || { translateZ: 0, rotateZ: 0, scale: 1 };
+          
+          // Determinar el efecto dominante
+          let dominantEffect = "NEUTRAL";
+          let intensity = 0;
+          
+          if (Math.abs(effect.translateZ) > 5) {
+            dominantEffect = "ELEVACIÓN";
+            intensity = Math.abs(effect.translateZ) / 20;
+          } else if (Math.abs(effect.rotateZ) > 5) {
+            dominantEffect = "ROTACIÓN";
+            intensity = Math.abs(effect.rotateZ) / 30;
+          } else if (Math.abs(effect.scale - 1) > 0.05) {
+            dominantEffect = "RESONANCIA";
+            intensity = Math.abs(effect.scale - 1) * 5;
+          } else if (Math.abs(effect.translateX) > 2 || Math.abs(effect.translateY) > 2) {
+            dominantEffect = "DESPLAZAMIENTO";
+            intensity = (Math.abs(effect.translateX) + Math.abs(effect.translateY)) / 10;
+          }
+          
+          objectStates.push({
+            id: index + 1,
+            effect: dominantEffect,
+            intensity: intensity.toFixed(2)
+          });
+        });
+        
+        // Crear log
+        const logEntry = document.createElement('div');
+        logEntry.className = 'log-entry receiver';
+        
+        let logContent = `
+          <div class="log-time">T=${(time + 0.5).toFixed(1)}s: MONITORIZANDO</div>
+        `;
+        
+        objectStates.forEach(state => {
+          logContent += `<div>Objeto ${state.id}: ${state.effect} (${state.intensity})</div>`;
+        });
+        
+        logEntry.innerHTML = logContent;
+        
+        // Añadir al panel
+        receiverLogs.appendChild(logEntry);
+        
+        // Limitar número de logs
+        if (receiverLogs.children.length > 10) {
+          receiverLogs.removeChild(receiverLogs.firstChild);
+        }
+        
+        // Desplazar al final
+        receiverLogs.scrollTop = receiverLogs.scrollHeight;
+        
+        // Animar agente receptor
+        agentB.style.transform = 'translate(50%, -50%) scale(1.2)';
+        safeSetTimeout(() => {
+          agentB.style.transform = 'translate(50%, -50%) scale(1)';
+        }, 200);
+      }, 500);
+    }
+    
+    // Bucle de animación
+    function animate(timestamp) {
+      if (!lastTime) lastTime = timestamp;
+      const deltaTime = (timestamp - lastTime) / 1000;
+      lastTime = timestamp;
+      
+      if (running) {
+        // Actualizar tiempo
+        time += deltaTime;
+        
+        // Actualizar ondas
+        updateWaves();
+        
+        // Generar logs y ondas periódicamente
+        if (Math.floor(time * 2) > Math.floor((time - deltaTime) * 2)) {
+          generateEmitterLog();
+          generateReceiverLog();
+        }
+        
+        // Continuar animación
+        animationId = requestAnimationFrame(animate);
+      }
+    }
+    
+    // Iniciar/Detener simulación
+    function toggleSimulation() {
+      running = !running;
+      
+      if (running) {
+        // Resetear estado
+        time = 0;
+        lastTime = 0;
+        
+        // Limpiar logs
+        emitterLogs.innerHTML = '';
+        receiverLogs.innerHTML = '';
+        
+        // Limpiar ondas existentes
+        waves.forEach(wave => {
+          recycleElements(wave);
+        });
+        waves = [];
+        
+        // Resetear objetos
+        objects.forEach(obj => {
+          obj.style.transform = '';
+        });
+        objectEffects.clear();
+        
+        // Limpiar timeouts pendientes
+        clearAllTimeouts();
+        
+        // Iniciar animación
+        animationId = requestAnimationFrame(animate);
+      } else {
+        // Detener animación
+        if (animationId) {
+          cancelAnimationFrame(animationId);
+          animationId = null;
+        }
+        
+        // Limpiar timeouts pendientes
+        clearAllTimeouts();
+      }
+    }
+    
+    // Escuchar mensajes del padre
+    window.addEventListener('message', (event) => {
+      if (event.data === 'start' && !running) {
+        toggleSimulation();
+      } else if (event.data === 'stop' && running) {
+        toggleSimulation();
+      }
+    });
+  </script>
+</body>
+</html>
